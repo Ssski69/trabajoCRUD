@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Captura de Datos</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #999; padding: 6px 12px; }
+    th { background: #eee; }
+    #seccionTabla { display: none; }
+  </style>
+</head>
+<body>
+
+  <h2>Captura de Datos</h2>
+
+  <form id="formulario">
+    <input type="hidden" id="id">
+
+    <label for="nombre">Nombre:</label><br>
+    <input type="text" id="nombre" required><br><br>
+
+    <label for="edad">Edad:</label><br>
+    <input type="number" id="edad" required min="1" max="120"><br><br>
+
+    <label for="cargo">Cargo:</label><br>
+    <input type="text" id="cargo" required><br><br>
+
+    <!-- >>> AGREGAR CAMPO NUEVO (lugar 1 de 6)
+         Copia un bloque label + input y cambia el nombre y el id.
+         Ejemplo:
+         <label for="telefono">Teléfono:</label><br>
+         <input type="text" id="telefono" required><br><br>
+    -->
+
+    <button type="button" id="btnRegistrar">Registrar</button>
+    <button type="button" id="btnConsultar">Consultar</button>
+    <button type="button" id="btnModificar">Modificar</button>
+    <button type="button" id="btnEliminar">Eliminar</button>
+  </form>
+
+  <p id="estado"></p>
+
+  <div id="seccionTabla">
+    <h2>Registros</h2>
+    <button type="button" id="btnCerrar">Cerrar tabla</button>
+    <br><br>
+    <input type="text" id="buscador" placeholder="Buscar por nombre...">
+
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Nombre</th>
+          <th>Edad</th>
+          <th>Cargo</th>
+          <!-- >>> AGREGAR CAMPO NUEVO (lugar 2 de 6)
+               Agrega aquí el encabezado de la columna nueva.
+               Ejemplo: <th>Teléfono</th>
+          -->
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // Pega aquí la URL de tu implementación de Apps Script
+    var URL_SCRIPT = "PEGA_AQUI_TU_URL_DE_APPS_SCRIPT";
+    var registros = [];
+    var tablaVisible = false;
+
+    // ---------- Enviar datos al script ----------
+    function enviar(datos) {
+      return fetch(URL_SCRIPT, {
+        method: "POST",
+        body: new URLSearchParams(datos)
+      }).then(function (r) { return r.json(); });
+    }
+
+    // ---------- Botones activos según el estado ----------
+    // Registrar: solo si NO hay un registro cargado
+    // Modificar y Eliminar: solo si hay un registro cargado
+    function actualizarBotones() {
+      var hayRegistro = document.getElementById("id").value !== "";
+      document.getElementById("btnRegistrar").disabled = hayRegistro;
+      document.getElementById("btnModificar").disabled = !hayRegistro;
+      document.getElementById("btnEliminar").disabled = !hayRegistro;
+    }
+
+    function limpiarFormulario() {
+      document.getElementById("formulario").reset();
+      document.getElementById("id").value = "";
+      actualizarBotones();
+    }
+
+    // ---------- REGISTRAR ----------
+    document.getElementById("btnRegistrar").onclick = function () {
+      if (!document.getElementById("formulario").reportValidity()) return;
+
+      document.getElementById("estado").textContent = "Guardando...";
+      enviar({
+        accion: "guardar",
+
+        // >>> AGREGAR CAMPO NUEVO (lugar 3 de 6)
+        // Cada campo termina con coma, EXCEPTO el último.
+        // Ejemplo con telefono:
+        //   cargo: document.getElementById("cargo").value,
+        //   telefono: document.getElementById("telefono").value
+        nombre: document.getElementById("nombre").value,
+        edad: document.getElementById("edad").value,
+        cargo: document.getElementById("cargo").value
+
+      }).then(function (respuesta) {
+        terminarAccion(respuesta, "¡Registro guardado!");
+      });
+    };
+
+    // ---------- CONSULTAR ----------
+    document.getElementById("btnConsultar").onclick = function () {
+      document.getElementById("estado").textContent = "Consultando...";
+      tablaVisible = true;
+      document.getElementById("seccionTabla").style.display = "block";
+      cargarRegistros(function () {
+        document.getElementById("estado").textContent = "";
+      });
+    };
+
+    function cargarRegistros(alTerminar) {
+      fetch(URL_SCRIPT)
+        .then(function (r) { return r.json(); })
+        .then(function (datos) {
+          registros = datos;
+          mostrarTabla();
+          if (alTerminar) alTerminar();
+        });
+    }
+
+    function mostrarTabla() {
+      var filtro = document.getElementById("buscador").value.trim().toLowerCase();
+      var tabla = document.getElementById("tabla");
+      tabla.innerHTML = "";
+
+      registros.forEach(function (reg) {
+        // Solo muestra los nombres que INICIAN con lo escrito
+        if (!reg.nombre.toString().toLowerCase().startsWith(filtro)) return;
+
+        var tr = document.createElement("tr");
+        agregarCelda(tr, new Date(reg.fecha).toLocaleString());
+
+        // >>> AGREGAR CAMPO NUEVO (lugar 4 de 6)
+        // Agrega una línea por cada campo, en el mismo orden que los <th>.
+        // Ejemplo: agregarCelda(tr, reg.telefono);
+        agregarCelda(tr, reg.nombre);
+        agregarCelda(tr, reg.edad);
+        agregarCelda(tr, reg.cargo);
+
+        var td = document.createElement("td");
+
+        var btnModificarFila = document.createElement("button");
+        btnModificarFila.textContent = "Modificar registro";
+        btnModificarFila.onclick = function () { cargarEnFormulario(reg); };
+
+        var btnEliminarFila = document.createElement("button");
+        btnEliminarFila.textContent = "Eliminar";
+        btnEliminarFila.onclick = function () { eliminar(reg.id); };
+
+        td.appendChild(btnModificarFila);
+        td.appendChild(btnEliminarFila);
+        tr.appendChild(td);
+        tabla.appendChild(tr);
+      });
+    }
+
+    function agregarCelda(fila, texto) {
+      var td = document.createElement("td");
+      td.textContent = texto;
+      fila.appendChild(td);
+    }
+
+    document.getElementById("buscador").oninput = mostrarTabla;
+
+    // ---------- CERRAR TABLA ----------
+    document.getElementById("btnCerrar").onclick = function () {
+      tablaVisible = false;
+      document.getElementById("seccionTabla").style.display = "none";
+      document.getElementById("buscador").value = "";
+      document.getElementById("tabla").innerHTML = "";
+    };
+
+    // ---------- Pasar el registro al formulario ----------
+    function cargarEnFormulario(reg) {
+      document.getElementById("id").value = reg.id;
+
+      // >>> AGREGAR CAMPO NUEVO (lugar 5 de 6)
+      // Agrega una línea por cada campo (aquí SÍ todas terminan en punto y coma).
+      // Ejemplo: document.getElementById("telefono").value = reg.telefono;
+      document.getElementById("nombre").value = reg.nombre;
+      document.getElementById("edad").value = reg.edad;
+      document.getElementById("cargo").value = reg.cargo;
+
+      document.getElementById("estado").textContent =
+        "Modificando registro: cambia los datos y presiona Modificar";
+      actualizarBotones();
+
+      window.scrollTo(0, 0);                     // sube al formulario
+      document.getElementById("nombre").focus(); // cursor en el nombre
+    }
+
+    // ---------- MODIFICAR ----------
+    document.getElementById("btnModificar").onclick = function () {
+      var id = document.getElementById("id").value;
+
+      if (id === "") {
+        alert("Primero elige un registro con el botón 'Modificar registro'");
+        return;
+      }
+      if (!document.getElementById("formulario").reportValidity()) return;
+
+      document.getElementById("estado").textContent = "Modificando...";
+      enviar({
+        accion: "editar",
+        id: id,
+
+        // >>> AGREGAR CAMPO NUEVO (lugar 6 de 6)
+        // Igual que en REGISTRAR: coma en todos, menos en el último.
+        // Ejemplo con telefono:
+        //   cargo: document.getElementById("cargo").value,
+        //   telefono: document.getElementById("telefono").value
+        nombre: document.getElementById("nombre").value,
+        edad: document.getElementById("edad").value,
+        cargo: document.getElementById("cargo").value
+
+      }).then(function (respuesta) {
+        terminarAccion(respuesta, "¡Registro modificado!");
+      });
+    };
+
+    // ---------- ELIMINAR ----------
+    document.getElementById("btnEliminar").onclick = function () {
+      eliminar(document.getElementById("id").value);
+    };
+
+    function eliminar(id) {
+      if (!confirm("¿Seguro que quieres eliminar este registro?")) return;
+
+      document.getElementById("estado").textContent = "Eliminando...";
+      enviar({ accion: "eliminar", id: id }).then(function (respuesta) {
+        terminarAccion(respuesta, "Registro eliminado");
+      });
+    }
+
+    // ---------- Mensaje al terminar cualquier acción ----------
+    function terminarAccion(respuesta, mensajeOk) {
+      document.getElementById("estado").textContent =
+        respuesta.ok ? mensajeOk : "Error: " + respuesta.mensaje;
+      limpiarFormulario();
+      if (tablaVisible) cargarRegistros();  // refresca la tabla si está abierta
+    }
+
+    actualizarBotones();
+  </script>
+
+</body>
+</html>
